@@ -12,9 +12,11 @@ duration heartBeatInterv = milliseconds(200);
 duration electionIntervLow = milliseconds(1000);
 duration electionIntervHigh = milliseconds(1500);
 
-// 
+// requestVote RPC 的超时时间
 duration requestVoteTimeout = milliseconds(500);
 
+// apply的时间间隔
+duration applyInterv = milliseconds(500);
 };
 
 #endif

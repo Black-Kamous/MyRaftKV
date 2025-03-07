@@ -51,13 +51,13 @@ add_subdirectory(src)
 add_subdirectory(examples)
 
 
-add_library(raft-core ${src_raft} ${src_utils})
-target_link_libraries(raft-core
-    RaftRpcs_grpc_proto
-    absl::check
-    absl::flags
-    absl::flags_parse
-    absl::log
-    ${_REFLECTION}
-    ${_GRPC_GRPCPP}
-    ${_PROTOBUF_LIBPROTOBUF})
+# add_library(raft-core ${src_raft} ${src_utils})
+# target_link_libraries(raft-core
+#     RaftRpcs_grpc_proto
+#     absl::check
+#     absl::flags
+#     absl::flags_parse
+#     absl::log
+#     ${_REFLECTION}
+#     ${_GRPC_GRPCPP}
+#     ${_PROTOBUF_LIBPROTOBUF})

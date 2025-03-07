@@ -27,7 +27,7 @@ message AppendEntriesReply {
   int32  term       = 1;
   bool   success    = 2;
   int32  missIndex  = 3;
-  int32  state      = 4;
+  int32  missTerm   = 4;
 }
 
 message InstallSnapshotArgs {
