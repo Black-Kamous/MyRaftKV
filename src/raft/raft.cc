@@ -1,20 +1,49 @@
 #include "raft.hh"
 
 Raft::Raft()
-    : stop_(false),
-    votedFor_(-1),
-    role_(RaftRole::Follower)
+    : stop_(false)
 {
-    // 随机化选举间隔
-    randomizeElectionInterv();
 }
 
 Raft::~Raft(){
     stop_ = true;
 }
 
-void Raft::init()
+void Raft::init(
+    std::vector<std::shared_ptr<RaftCaller>> peers,
+    int thisNode,
+    std::shared_ptr<LockedQueue<ApplyMsg>> applyCh
+)
 {
+    peers_ = peers;
+    thisNodeId_ = peers[thisNode]->peerId;
+
+    applyCh_ = applyCh;
+
+    totalNodeNum_ = peers_.size();
+    halfNodeNum_ = totalNodeNum_/2+1;
+
+    currentTerm_ = 0;
+    role_ = Follower;
+    votedFor_ = -1;
+    logs_.clear();
+    lastSnapShotedLogIndex_ = -1;
+    lastSnapShotedLogTerm_ = -1;
+    nextIndex_.resize(totalNodeNum_, 0);
+    matchedIndex_.resize(totalNodeNum_, 0);
+    commitedIndex_ = -1;
+    lastApplied_ = -1;
+    resetElectionTimer();
+    lastHearBeatTime_ = clock::now();
+
+    //从持久化恢复
+
+    std::thread election_T(&Raft::electionThread, this);
+    election_T.detach();
+    std::thread heartbeat_T(&Raft::heartBeatThread, this);
+    heartbeat_T.detach();
+    std::thread apply_T(&Raft::applyThread, this);
+    apply_T.detach();
 }
 
 void Raft::applyThread(){
@@ -26,7 +55,12 @@ void Raft::applyThread(){
             while(lastApplied_ < commitedIndex_){
                 lastApplied_++;
                 auto logPtr = logs_[getLogFromIndex(lastApplied_)];
-                msgs.push_back(ApplyMsg(*logPtr));
+                ApplyMsg msg;
+                msg.commandValid = true;
+                msg.snapshotValid = false;
+                msg.command = logPtr->command();
+                msg.commandIndex = logPtr->logindex();
+                msgs.push_back(msg);
             }
         }
         for(auto m:msgs){
@@ -35,8 +69,30 @@ void Raft::applyThread(){
     }
 }
 
-bool Raft::applyLog(ApplyMsg msg){
+bool Raft::execute(Op command, int* newLogIndex, int* newLogTerm, bool* isLeader){
+    std::unique_lock<std::mutex> lck(mtx_);
+    if(role_ != Leader){
+        *newLogIndex = -1;
+        *newLogTerm = -1;
+        *isLeader = false;
+        return false;
+    }
+
+    auto [lastIndex, lastTerm] = getLastLogState();
+    auto logPtr = std::make_shared<LogEntry>();
+    logPtr->set_logterm(currentTerm_);
+    logPtr->set_logindex(lastIndex + 1);
+    logPtr->set_command(command.asString());
+    logs_.push_back(logPtr);
+
+    *newLogIndex = logPtr->logindex();
+    *newLogTerm = logPtr->logterm();
+    *isLeader = true;
     return true;
+}
+
+void Raft::applyLog(ApplyMsg msg){
+    applyCh_->push(msg);
 }
 
 // 不加锁，注意在已经有锁的情况下调用该函数
@@ -227,7 +283,7 @@ void Raft::doHeartBeat(){
         if(peer->peerId == thisNodeId_) continue;
         auto [prevIndex, prevTerm] = getPrevLogState(i);
         std::vector<std::shared_ptr<LogEntry>> argLogs;
-        if(prevIndex != lastSnapShotedLogIndex_){
+        if(prevIndex > lastSnapShotedLogIndex_){
             for(int j=getLogFromIndex(prevIndex)+1; j<logs_.size(); ++j){
                 argLogs.push_back(std::shared_ptr(logs_[j])); //注意这里应当是拷贝
             }
@@ -291,7 +347,7 @@ void Raft::callAppendEntriesThread(
             accepted+=1;
             nextIndex_[i] = prevLogIndex + logs.size() + 1;
             matchedIndex_[i] = prevLogIndex + logs.size();
-            if(accepted >= halfNodeNum_){
+            if(accepted >= halfNodeNum_ && getLastLogState().second == currentTerm_){
                 commitedIndex_ = std::max((unsigned long)commitedIndex_, prevLogIndex + logs.size());
             }
         }else{
@@ -335,16 +391,127 @@ void Raft::randomizeElectionInterv() {
 }
 
 Status Raft::appenEntries(ServerContext* context, const AppendEntriesArgs* args,
-    AppendEntriesReply* reply){
-    
+    AppendEntriesReply* reply
+){
+    std::unique_lock<std::mutex> lck(mtx_);
+    if(args->term() < currentTerm_){
+        reply->set_term(currentTerm_);
+        reply->set_success(false);
+        return Status::OK;
+    }
+
+    if(args->term() > currentTerm_){
+        // role_ = Follower;
+        currentTerm_ = args->term();
+        votedFor_ = -1;
+    }
+
+    role_ = Follower;
+    resetElectionTimer();
+
+    // 寻找是否有匹配
+    auto [lastIndex, lastTerm] = getLastLogState();
+    if(lastIndex < args->prevlogindex()){
+        reply->set_term(currentTerm_);
+        reply->set_success(false);
+        reply->set_missindex(lastIndex+1);
+        reply->set_missterm(-1);
+        return Status::OK;
+    }
+    if(lastSnapShotedLogIndex_ > args->prevlogindex()){
+        // 本机缺少snapshot
+        reply->set_term(currentTerm_);
+        reply->set_success(false);
+        reply->set_missindex(lastSnapShotedLogIndex_+1);
+        reply->set_missterm(-1);
+        return Status::OK;
+    }
+
+    if(searchLog(args->prevlogindex(), args->prevlogterm())){
+        // 可以append log
+        for(int i=0;i<args->logs_size();++i){
+            auto log = args->logs(i);
+            if(log.logindex() > getLastLogState().first){
+                logs_.push_back(std::make_shared<LogEntry>(log));
+            }else{
+                auto logPtr = logs_[getLogFromIndex(log.logindex())];
+                if(logPtr->logterm() == log.logterm() && logPtr->command() != log.command()){
+                    // 错误情况！应检查算法错误 忽略
+                }
+                if(logPtr->logterm() != log.logterm()){
+                    logPtr->set_logterm(log.logterm());
+                    logPtr->set_command(log.command());
+                }
+            }
+        }
+
+        if(args->leadercommit() > commitedIndex_){
+            commitedIndex_ = std::min(getLastLogState().first, args->leadercommit());
+        }
+
+        reply->set_term(currentTerm_);
+        reply->set_success(true);
+    }else{
+        // log存在但不匹配
+        reply->set_term(currentTerm_);
+        reply->set_success(false);
+        int logOffset = getLogFromIndex(args->prevlogindex());
+        int missTerm = logs_[logOffset]->logterm();
+        int missIndex = args->prevlogindex();
+        for(int i = logOffset;i>=0;++i){
+            if(logs_[i]->logterm() == missTerm){
+                missIndex = logs_[i]->logindex();
+            }
+        }
+        reply->set_missterm(missTerm);
+        reply->set_missindex(missIndex);
+    }
+    return Status::OK;
+}
+
+bool Raft::searchLog(int index, int term){
+    if(index <= lastSnapShotedLogIndex_ || index > getLastLogState().first){
+        return false;
+    }
+    return logs_[getLogFromIndex(index)]->logterm() == term;
 }
 
 Status Raft::requestVote(ServerContext* context, const RequestVoteArgs* args,
-    RequestVoteReply* reply){
+    RequestVoteReply* reply
+){
+    std::unique_lock<std::mutex> lck(mtx_);
+    if(args->term() < currentTerm_){
+        reply->set_term(currentTerm_);
+        reply->set_votegranted(false);
+        return Status::OK;
+    }
+
+    if(args->term() > currentTerm_){
+        role_ = Follower;
+        currentTerm_ = args->term();
+        votedFor_ = -1;
+    }
+
+    if(votedFor_ == -1 || votedFor_ == args->candidateid()){
+        // voteFor_是空或等于candidateId才有可能投票
+        auto [lastIndex, lastTerm] = getLastLogState();
+        if(lastTerm < args->lastlogterm() ||        // candidate的term更新或term相等，index更大时可以投票
+            (lastTerm == args->lastlogterm() && lastIndex <= args->lastlogindex())){
+                // 只在投出票时重置选举计时器
+                resetElectionTimer();
+                reply->set_term(currentTerm_);
+                reply->set_votegranted(true);
+                return Status::OK;
+        }
+    }
+    reply->set_term(currentTerm_);
+    reply->set_votegranted(false);
+    return Status::OK;
     
 }
 
 Status Raft::installSnapshot(ServerContext* context, const InstallSnapshotArgs* args,
-    InstallSnapshotReply* reply){
+    InstallSnapshotReply* reply
+){
     
 }

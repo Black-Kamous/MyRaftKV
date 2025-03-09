@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package KVServerRpcsProto;
+
+service KVServerRpcs {
+    rpc get(GetArgs) returns (GetReply);
+    rpc putAppend(PutAppendArgs) returns (PutAppendReply);
+}
+
+enum ReturnCode {
+    DONE        = 0;
+    NO_KEY      = 1;
+    NOT_LEADER  = 2;
+    TIMED_OUT   = 3;
+}
+
+message GetArgs {
+    bytes  key = 1;
+    string clientId = 2;
+    int32  requestId = 3;
+}
+
+message GetReply {
+    ReturnCode retcode = 1;
+    bytes      value   = 2;
+}
+
+message PutAppendArgs {
+    bytes   key     = 1;
+    bytes   value   = 2;
+    string  op      = 3;
+
+    string  clientId    = 4;
+    int32   requestId   = 5;
+}
+
+message PutAppendReply {
+    ReturnCode retcode = 1;
+}

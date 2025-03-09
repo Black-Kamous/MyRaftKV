@@ -1,5 +1,5 @@
 foreach(_target
-    RaftRpcs helloworld)
+    RaftRpcs helloworld KVServerRpcs)
     get_filename_component(${_target}_proto "/root/MyKVRaft/src/proto/${_target}.proto" ABSOLUTE)
     get_filename_component(${_target}_proto_path "${${_target}_proto}" PATH)
     # Generated sources

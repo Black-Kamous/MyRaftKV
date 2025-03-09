@@ -16,6 +16,7 @@
 #include "RaftRpcs.grpc.pb.h"
 #include "raftCaller.hh"
 #include "config.hh"
+#include "utils.hh"
 #include "applymsg.hh"
 
 using grpc::Server;
@@ -31,6 +32,10 @@ using RaftRpcsProto::InstallSnapshotArgs;
 using RaftRpcsProto::InstallSnapshotReply;
 using RaftRpcsProto::LogEntry;
 
+/**
+ * Raft 节点，实现算法相关
+ * term，index从0开始
+ */
 class Raft final : public RaftRpcs::Service {
 
 	using clock = std::chrono::high_resolution_clock;
@@ -45,7 +50,14 @@ public:
 	Raft();
 	~Raft();
 	// 初始化Raft节点
-	void init();
+	void init(
+		std::vector<std::shared_ptr<RaftCaller>> peers,
+		int thisNode,
+		std::shared_ptr<LockedQueue<ApplyMsg>> applyCh
+	);
+
+	bool execute(Op command, int* newLogIndex, int* newLogTerm, bool* isLeader);
+
 	// 发送心跳线程
 	void heartBeatThread();
 	// 超时选举
@@ -54,8 +66,8 @@ public:
 	void applyThread();
 	// 重置选举计时器
 	void resetElectionTimer();
-	// 
-	bool applyLog(ApplyMsg msg);
+	// 将log apply到状态机
+	void applyLog(ApplyMsg msg);
 
 private:
 	// 在Snapshot存在的情况下logIndex和logs_的索引不一定相等
@@ -94,6 +106,8 @@ private:
 		int &accepted
 	);
 
+	bool searchLog(int index, int term);
+
 
 // 重载Service接口，执行服务端任务
 public:
@@ -128,6 +142,9 @@ private:
 	// 用于callAppendEntries线程同步
 	std::condition_variable appendResult_;
 
+	// 到KVServer的channel
+	std::shared_ptr<LockedQueue<ApplyMsg>> applyCh_;
+
 // 算法状态
 private:
 	// 本节点ID
@@ -148,7 +165,7 @@ private:
 	std::vector<int> nextIndex_;
 	// 最后一个已提交的log
 	int commitedIndex_;
-	// 
+	// 最后一个应用到状态机的log
 	int lastApplied_;
 };
 

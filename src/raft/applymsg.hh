@@ -4,9 +4,25 @@
 #include "RaftRpcs.pb.h"
 
 class ApplyMsg {
-    RaftRpcsProto::LogEntry le_;
 public:
-    ApplyMsg(RaftRpcsProto::LogEntry le) :le_(le){}
+    bool commandValid;
+    std::string command;
+    int commandIndex;
+    bool snapshotValid;
+    std::string snapshot;
+    int snapshotTerm;
+    int snapshotIndex;
+public:
+    ApplyMsg()
+        : commandValid(false),
+        command(),
+        commandIndex(-1),
+        snapshotValid(false),
+        snapshotTerm(-1),
+        snapshotIndex(-1)
+    {
+
+    };
 };
 
 

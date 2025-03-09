@@ -42,8 +42,11 @@ endif()
 find_package(absl CONFIG REQUIRED)
 
 
+include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${PROJECT_SOURCE_DIR}/src/utils)
 include_directories(${PROJECT_SOURCE_DIR}/src/raft)
+include_directories(${PROJECT_SOURCE_DIR}/src/KVServer)
+include_directories(${PROJECT_SOURCE_DIR}/src/KVClerk)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/src/proto)
 
 add_subdirectory(src)

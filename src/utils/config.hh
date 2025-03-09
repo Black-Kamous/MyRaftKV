@@ -19,4 +19,16 @@ duration requestVoteTimeout = milliseconds(500);
 duration applyInterv = milliseconds(500);
 };
 
+namespace ServerConfig {
+duration consensusTimeout = milliseconds(500);
+}
+
+class NodeConfig{
+public:
+    NodeConfig(std::string fileName){}
+    ~NodeConfig(){}
+
+    std::vector<std::pair<std::string, std::string>> confItems;
+};
+
 #endif
