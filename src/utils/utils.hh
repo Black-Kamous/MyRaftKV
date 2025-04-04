@@ -7,6 +7,11 @@
 #include <condition_variable>
 #include <functional>
 #include <iostream>
+#include <algorithm>
+#include <string>
+#include <sstream>
+#include <vector>
+
 
 template <typename T>
 class LockedQueue {
@@ -16,7 +21,7 @@ public:
 
     void push(const T& arg){
         std::unique_lock<std::mutex> lck(mtx_);
-        queue_.push(std::forward<T>(arg));
+        queue_.push(arg);
         notEmpty_.notify_one();
     }
 
@@ -42,7 +47,7 @@ public:
     std::shared_ptr<T> top() {
         std::unique_lock<std::mutex> lck(mtx_);
         notEmpty_.wait(lck, 
-            [](){
+            [this](){
                 return !queue_.empty();
             }
         );
@@ -84,12 +89,7 @@ public:
         return "Operation{" + operation + "},Key{" + key + "},Value{" + value + "},ClientId{" +
                 clientId + "},RequestId{" + std::to_string(requestId) + "}";
     }
-
-#include <string>
-#include <sstream>
-#include <vector>
-#include <algorithm>
-
+    
     // 反序列化静态方法
     void fromString(const std::string& str) {
         std::vector<std::string> parts;

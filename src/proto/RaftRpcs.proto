@@ -3,7 +3,7 @@ syntax = "proto3";
 package RaftRpcsProto;
 
 service RaftRpcs {
-  rpc appenEntries(AppendEntriesArgs)       returns (AppendEntriesReply);
+  rpc appendEntries(AppendEntriesArgs)       returns (AppendEntriesReply);
   rpc installSnapshot(InstallSnapshotArgs)  returns (InstallSnapshotReply);
   rpc requestVote(RequestVoteArgs)          returns (RequestVoteReply);
 }

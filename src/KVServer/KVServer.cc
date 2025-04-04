@@ -26,18 +26,8 @@ KVServer::KVServer(
     raftNode_ = std::make_shared<Raft>();
 
     // 监听rpc的线程
-    std::thread t([this,port](){
-            std::string server_address = absl::StrFormat("0.0.0.0:%d", port);
-            grpc::EnableDefaultHealthCheckService(true);
-            grpc::reflection::InitProtoReflectionServerBuilderPlugin();
-            ServerBuilder builder;
-            builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-            builder.RegisterService(this);
-            builder.RegisterService(raftNode_.get());
-            std::unique_ptr<Server> server(builder.BuildAndStart());
-            std::cout << "Server listening on " << server_address << std::endl;
-            server->Wait();
-        }
+    std::thread t(
+        &KVServer::listenRPCThread, this, port
     );
     t.detach();
     sleep(1);
@@ -68,7 +58,7 @@ KVServer::KVServer(
 
     raftNode_->init(peers, thisNodeId, applyCh_);
     std::thread t1(
-        &KVServer::getApplyThread
+        &KVServer::getApplyThread, this
     );
     t1.join();
 }
@@ -111,6 +101,20 @@ bool KVServer::informExecuted(Op op, int index)
     lck.unlock();
     lq->push(op);
     return true;
+}
+
+void KVServer::listenRPCThread(int port)
+{
+    std::string server_address = absl::StrFormat("0.0.0.0:%d", port);
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    ServerBuilder builder;
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(this);
+    builder.RegisterService(raftNode_.get());
+    std::unique_ptr<Server> server(builder.BuildAndStart());
+    std::cout << "Server listening on " << server_address << std::endl;
+    server->Wait();
 }
 
 void KVServer::executePutOnKV(Op op)

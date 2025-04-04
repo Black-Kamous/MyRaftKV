@@ -323,7 +323,7 @@ void Raft::callAppendEntriesThread(
     int &accepted
 ) {
     AppendEntriesReply reply;
-    Status ret = peer->appenEntries(
+    Status ret = peer->appendEntries(
         term,
         leaderId,
         prevLogIndex,
@@ -390,7 +390,7 @@ void Raft::randomizeElectionInterv() {
     electionInterv_ = std::chrono::milliseconds(u(gen));
 }
 
-Status Raft::appenEntries(ServerContext* context, const AppendEntriesArgs* args,
+Status Raft::appendEntries(ServerContext* context, const AppendEntriesArgs* args,
     AppendEntriesReply* reply
 ){
     std::unique_lock<std::mutex> lck(mtx_);
@@ -514,4 +514,8 @@ Status Raft::installSnapshot(ServerContext* context, const InstallSnapshotArgs* 
     InstallSnapshotReply* reply
 ){
     
+}
+
+void Raft::callInstallSnapshotThread(std::shared_ptr<RaftCaller> peer)
+{
 }

@@ -105,13 +105,18 @@ private:
 		int leaderCommit,
 		int &accepted
 	);
-
+	// 判断本地log是否存在和匹配给出的logindex和term
 	bool searchLog(int index, int term);
-
+	// 将快照发送给peer
+	void callInstallSnapshotThread(
+		std::shared_ptr<RaftCaller> peer
+	);
+	// 获取快照，删除冗余log
+	int processSnapshot(std::string snapshot, int lastSnapshotIndex);
 
 // 重载Service接口，执行服务端任务
 public:
-	Status appenEntries(ServerContext* context, const AppendEntriesArgs* args,
+	Status appendEntries(ServerContext* context, const AppendEntriesArgs* args,
 		AppendEntriesReply* reply) override;
 
 	Status requestVote(ServerContext* context, const RequestVoteArgs* args,

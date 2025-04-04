@@ -32,7 +32,7 @@ public:
 
 // 发起Rpc call
 public:
-Status appenEntries(int term,
+Status appendEntries(int term,
     int leaderId,
     int prevLogIndex,
     int prevLogTerm,

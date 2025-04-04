@@ -3,7 +3,7 @@ get_filename_component(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 
 # 将该目录下所有源文件添加到 SRC_LIST 变量中
 set(SRC_LIST
-    ${PROJECT_SOURCE_DIR}/src/raft/KVServer.cc
+    ${PROJECT_SOURCE_DIR}/src/KVServer/KVServer.cc
 )
 
 set(src_kvserver ${SRC_LIST} CACHE INTERNAL "Description of the variable")

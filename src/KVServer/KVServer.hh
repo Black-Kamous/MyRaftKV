@@ -59,6 +59,10 @@ public:
         return stm_[key];
     }
 
+    char* dump(){
+        
+    }
+
 private:
     std::shared_mutex mtx_;
     std::unordered_map<std::string, std::string> stm_;
@@ -79,15 +83,22 @@ private:
     void getApplyThread();
     // 执行applymsg
     void executeCommand(std::shared_ptr<ApplyMsg> msg);
+    // 将raftnode传来的快照作用到状态机
     void executeSnapshot(std::shared_ptr<ApplyMsg> msg);
-    // 
+    // 判断请求是否重复
     bool isDuplicate(std::string clientId, int requestId);
-    // 
+    // 将数据库操作执行到KV数据库
     std::pair<bool, std::string> executeGetOnKV(Op op);
     void executePutOnKV(Op op);
     void executeAppendOnKV(Op op);
-    //
+    // 将操作完成的消息发送给waitApplyCh
     bool informExecuted(Op op, int index);
+    // 监听RPC
+    void listenRPCThread(int port);
+    // 制作快照
+    std::string makeSnapshot();
+    // 判断是否应该制作快照
+    bool isTimeToSnapshot();
 
 private:
     bool stop_;

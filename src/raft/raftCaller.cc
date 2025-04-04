@@ -1,6 +1,6 @@
 #include "raftCaller.hh"
 
-Status RaftCaller::appenEntries(int term, int leaderId, int prevLogIndex, int prevLogTerm, std::vector<std::shared_ptr<LogEntry>> logs, int leaderCommit, AppendEntriesReply *reply)
+Status RaftCaller::appendEntries(int term, int leaderId, int prevLogIndex, int prevLogTerm, std::vector<std::shared_ptr<LogEntry>> logs, int leaderCommit, AppendEntriesReply *reply)
 {
     AppendEntriesArgs args;
 
@@ -15,7 +15,7 @@ Status RaftCaller::appenEntries(int term, int leaderId, int prevLogIndex, int pr
         *entrySlot = *logPtr;
     }
     ClientContext context;
-    return stub_->appenEntries(&context, args, reply);
+    return stub_->appendEntries(&context, args, reply);
 }
 
 Status RaftCaller::requestVote(int term, int candidateId, int lastLogIndex, int lastLogTerm, RequestVoteReply *reply)
