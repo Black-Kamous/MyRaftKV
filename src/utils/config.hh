@@ -20,6 +20,7 @@ duration applyInterv = milliseconds(500);
 };
 
 namespace ServerConfig {
+// Server等待raftNode判断共识的时间
 duration consensusTimeout = milliseconds(500);
 }
 

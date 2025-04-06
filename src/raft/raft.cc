@@ -458,10 +458,10 @@ Status Raft::appendEntries(ServerContext* context, const AppendEntriesArgs* args
         int logOffset = getLogFromIndex(args->prevlogindex());
         int missTerm = logs_[logOffset]->logterm();
         int missIndex = args->prevlogindex();
-        for(int i = logOffset;i>=0;++i){
+        for(int i = logOffset;i>=0;--i){
             if(logs_[i]->logterm() == missTerm){
                 missIndex = logs_[i]->logindex();
-            }
+            }else{break;}
         }
         reply->set_missterm(missTerm);
         reply->set_missindex(missIndex);
