@@ -12,6 +12,9 @@
 #include <atomic>
 #include <random>
 #include <condition_variable>
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <fstream>
 
 #include "RaftRpcs.grpc.pb.h"
 #include "raftCaller.hh"
@@ -45,6 +48,25 @@ class Raft final : public RaftRpcs::Service {
 		Candidate,
 		Leader
 	};
+
+	// 持久化
+	friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version) {
+        ar & currentTerm_;
+        ar & votedFor_;
+        ar & logs_;
+        ar & lastSnapShotedLogIndex_;
+        ar & lastSnapShotedLogTerm_;
+    }
+    
+    // 持久化
+    void persist();
+    void readPersistedState();
+    void saveSnapshot(const std::string& snapshot);
+    void loadSnapshot();
+    std::string snapshotFileName() const;
+    std::string stateFileName() const;
 
 public:
 	Raft();

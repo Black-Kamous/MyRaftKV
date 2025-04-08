@@ -33,17 +33,20 @@ void Raft::init(
     matchedIndex_.resize(totalNodeNum_, 0);
     commitedIndex_ = -1;
     lastApplied_ = -1;
-    resetElectionTimer();
-    lastHearBeatTime_ = clock::now();
-
+    
     //从持久化恢复
-
+    readPersistedState();
+    loadSnapshot();
+    
     std::thread election_T(&Raft::electionThread, this);
     election_T.detach();
     std::thread heartbeat_T(&Raft::heartBeatThread, this);
     heartbeat_T.detach();
     std::thread apply_T(&Raft::applyThread, this);
     apply_T.detach();
+    
+    resetElectionTimer();
+    lastHearBeatTime_ = clock::now();
 }
 
 void Raft::applyThread(){
@@ -350,6 +353,7 @@ void Raft::callAppendEntriesThread(
             if(accepted >= halfNodeNum_ && getLastLogState().second == currentTerm_){
                 commitedIndex_ = std::max((unsigned long)commitedIndex_, prevLogIndex + logs.size());
             }
+            persist();
         }else{
             // 快速回退
             int confilictIndex = reply.missindex(), conflictTerm = reply.missterm();
@@ -513,9 +517,111 @@ Status Raft::requestVote(ServerContext* context, const RequestVoteArgs* args,
 Status Raft::installSnapshot(ServerContext* context, const InstallSnapshotArgs* args,
     InstallSnapshotReply* reply
 ){
+    std::unique_lock<std::mutex> lck(mtx_);
     
+    // 检查Term
+    if(args->term() < currentTerm_){
+        reply->set_term(currentTerm_);
+        return Status::OK;
+    }
+    
+    // 更新任期和角色
+    if(args->term() > currentTerm_){
+        currentTerm_ = args->term();
+        votedFor_ = -1;
+    }
+    role_ = Follower;
+    resetElectionTimer();
+
+    // 检查快照是否过时
+    if(args->lastincludedindex() <= lastSnapShotedLogIndex_){
+        reply->set_term(currentTerm_);
+        return Status::OK;
+    }
+
+    saveSnapshot(args->data());
+    processSnapshot(args->data(), args->lastincludedindex());
+
+    reply->set_term(currentTerm_);
+    return Status::OK;
 }
 
 void Raft::callInstallSnapshotThread(std::shared_ptr<RaftCaller> peer)
 {
+}
+
+
+
+
+// 在raft.cc中添加实现
+// 持久化路径配置（可根据需要修改）
+constexpr const char* SNAPSHOT_FILE = "raft_snapshot.dat";
+constexpr const char* STATE_FILE = "raft_state.dat";
+
+void Raft::persist() {
+    std::ofstream ofs(stateFileName(), std::ios::binary);
+    boost::archive::binary_oarchive oa(ofs);
+    
+    std::unique_lock<std::mutex> lck(mtx_);
+    oa << *this;
+}
+
+void Raft::readPersistedState() {
+    std::ifstream ifs(stateFileName(), std::ios::binary);
+    if (!ifs.good()) return;
+    
+    boost::archive::binary_iarchive ia(ifs);
+    std::unique_lock<std::mutex> lck(mtx_);
+    ia >> *this;
+}
+
+std::string Raft::snapshotFileName() const {
+    return std::to_string(thisNodeId_) + "_" + SNAPSHOT_FILE;
+}
+
+std::string Raft::stateFileName() const {
+    return std::to_string(thisNodeId_) + "_" + STATE_FILE;
+}
+
+void Raft::saveSnapshot(const std::string& snapshot) {
+    // 保存快照数据
+    std::ofstream ofs(snapshotFileName(), std::ios::binary);
+    ofs << snapshot;
+    
+    // 保存快照元数据
+    std::unique_lock<std::mutex> lck(mtx_);
+}
+
+void Raft::loadSnapshot() {
+    std::ifstream ifs(snapshotFileName(), std::ios::binary);
+    if (ifs.good()) {
+        std::string snapshot;
+        ifs >> snapshot;
+        // 实际应用快照到状态机（需要根据具体实现补充）
+        processSnapshot(snapshot, lastSnapShotedLogIndex_);
+    }
+}
+
+
+int Raft::processSnapshot(std::string snapshot, int lastSnapshotIndex) {
+    std::unique_lock<std::mutex> lck(mtx_);
+    // 清理旧日志
+    auto newLogStart = getLogFromIndex(lastSnapshotIndex);
+    int lastSnapshotTerm = logs_[newLogStart]->logterm();
+    logs_.erase(logs_.begin(), logs_.begin() + newLogStart);
+
+    ApplyMsg msg;
+    msg.commandValid = false;
+    msg.snapshotValid = true;
+    msg.snapshot = snapshot;
+    msg.snapshotIndex = lastSnapshotIndex;
+    msg.snapshotTerm = lastSnapshotTerm;
+    applyLog(msg);
+    
+    // 更新快照元数据
+    lastSnapShotedLogIndex_ = lastSnapshotIndex;
+    lastSnapShotedLogTerm_ = lastSnapshotTerm; // 从快照中解析
+    
+    persist();  // 快照处理后持久化
+    return lastSnapshotIndex;
 }

@@ -81,6 +81,8 @@ void KVServer::executeCommand(std::shared_ptr<ApplyMsg> msg)
 
 void KVServer::executeSnapshot(std::shared_ptr<ApplyMsg> msg)
 {
+    std::unique_lock<std::mutex> lck(mtx_);
+    sm.applySnapshot(msg->snapshot);
 }
 
 bool KVServer::isDuplicate(std::string clientId, int requestId)
@@ -248,4 +250,14 @@ std::pair<bool, std::string> KVServer::executeGetOnKV(Op op)
     }else{
         return {true, res};
     }
+}
+
+std::string KVServer::makeSnapshot()
+{
+    std::unique_lock<std::mutex> lck(mtx_);
+    
+    // 序列化状态机
+    std::string snapshot = sm.serialize();
+    
+    return snapshot;
 }

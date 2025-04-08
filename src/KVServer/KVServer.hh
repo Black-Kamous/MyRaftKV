@@ -37,7 +37,35 @@ using KVServerRpcsProto::PutAppendArgs;
 using KVServerRpcsProto::PutAppendReply;
 
 class StateMachine {
+    // 序列化相关
+private:
+    friend class boost::serialization::access;
+    
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version) {
+        ar & stm_; // 直接序列化unordered_map
+    }
+
 public:
+    std::string serialize() {
+        std::ostringstream oss;
+        {
+            std::shared_lock<std::shared_mutex> lck(mtx_);
+            boost::archive::binary_oarchive oa(oss);
+            oa << *this; // 调用成员serialize方法
+        }
+        return oss.str();
+    }
+
+    void applySnapshot(const std::string& snapshot) {
+        std::istringstream iss(snapshot);
+        boost::archive::binary_iarchive ia(iss);
+        std::unique_lock<std::shared_mutex> lck(mtx_);
+        ia >> *this; // 调用成员serialize方法
+    }
+
+
+    public:
     StateMachine(){}
     ~StateMachine(){};
 
@@ -57,10 +85,6 @@ public:
             return "";
         }
         return stm_[key];
-    }
-
-    char* dump(){
-        
     }
 
 private:
