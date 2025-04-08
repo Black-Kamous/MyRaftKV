@@ -548,6 +548,51 @@ Status Raft::installSnapshot(ServerContext* context, const InstallSnapshotArgs* 
 
 void Raft::callInstallSnapshotThread(std::shared_ptr<RaftCaller> peer)
 {
+    // 加锁获取快照数据和元数据
+    std::unique_lock<std::mutex> lck(mtx_);
+    
+    // 准备快照参数
+    InstallSnapshotArgs args;
+    args.set_term(currentTerm_);
+    args.set_leaderid(thisNodeId_);
+    args.set_lastincludedindex(lastSnapShotedLogIndex_);
+    args.set_lastincludedterm(lastSnapShotedLogTerm_);
+
+    args.set_data(snapshot_);
+
+    InstallSnapshotReply reply;
+    Status ret = peer->installSnapshot(currentTerm_, thisNodeId_, lastSnapShotedLogIndex_, lastSnapShotedLogTerm_, snapshot_.c_str(), &reply);
+
+    // 处理响应
+    if (ret.ok()) {
+        std::unique_lock<std::mutex> lck(mtx_);
+        
+        // 检查任期有效性
+        if (reply.term() > currentTerm_) {
+            role_ = Follower;
+            currentTerm_ = reply.term();
+            votedFor_ = -1;
+            persist();
+            return;
+        }
+
+        // 更新匹配索引（快照安装成功）
+        if (role_ == Leader) {
+            int peerId = peer->peerId;
+            nextIndex_[peerId] = lastSnapShotedLogIndex_ + 1;
+            matchedIndex_[peerId] = lastSnapShotedLogIndex_;
+            
+            // 检查是否达到多数派
+            int count = 1; // 包含自身
+            for (auto& m : matchedIndex_) {
+                if (m >= lastSnapShotedLogIndex_) count++;
+            }
+            
+            if (count >= halfNodeNum_) {
+                commitedIndex_ = std::max(commitedIndex_, lastSnapShotedLogIndex_);
+            }
+        }
+    } 
 }
 
 

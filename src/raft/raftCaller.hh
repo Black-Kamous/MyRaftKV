@@ -50,7 +50,7 @@ Status installSnapshot(int term,
     int leaderId,
     int lastIncludedIndex,
     int lastIncludedTerm,
-    char*  data,
+    const char*  data,
     InstallSnapshotReply* reply);
 
 public:

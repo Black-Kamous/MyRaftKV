@@ -31,7 +31,7 @@ Status RaftCaller::requestVote(int term, int candidateId, int lastLogIndex, int 
     return stub_->requestVote(&context, args, reply);
 }
 
-Status RaftCaller::installSnapshot(int term, int leaderId, int lastIncludedIndex, int lastIncludedTerm, char *data, InstallSnapshotReply *reply)
+Status RaftCaller::installSnapshot(int term, int leaderId, int lastIncludedIndex, int lastIncludedTerm, const char *data, InstallSnapshotReply *reply)
 {
     InstallSnapshotArgs args;
 

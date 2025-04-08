@@ -182,6 +182,8 @@ private:
 	int votedFor_;
 	// 日志，使用shared_ptr就是认为leader的log不会在某一刻被认定失效
 	std::vector<std::shared_ptr<LogEntry>> logs_;
+	// 快照
+	std::string snapshot_;
 	// 当前角色
 	RaftRole role_;
 	// 快照包括的最后一条log信息，在log和快照都空时充当term和index的初始化
